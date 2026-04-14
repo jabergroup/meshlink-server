@@ -25,9 +25,6 @@ func InitAuth() {
 	authUsername = os.Getenv("MESHLINK_USER")
 	pass := os.Getenv("MESHLINK_PASS")
 
-	fmt.Printf("  DEBUG: MESHLINK_USER='%s' (len=%d)\n", authUsername, len(authUsername))
-	fmt.Printf("  DEBUG: MESHLINK_PASS set=%v (len=%d)\n", pass != "", len(pass))
-
 	if authUsername == "" || pass == "" {
 		fmt.Println("  WARNING: MESHLINK_USER / MESHLINK_PASS not set! Auth disabled.")
 		return
@@ -36,7 +33,6 @@ func InitAuth() {
 	// Hash the password
 	h := sha256.Sum256([]byte(pass))
 	authPassword = hex.EncodeToString(h[:])
-	fmt.Printf("  DEBUG: passHash=%s\n", authPassword[:16])
 
 	// Generate JWT secret
 	jwtSecret = make([]byte, 32)
