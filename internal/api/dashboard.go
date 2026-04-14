@@ -249,6 +249,7 @@ const dashboardHTML = `<!DOCTYPE html>
 const API = '';
 let currentCode = '';
 let pollTimer = null;
+let apiKey = localStorage.getItem('meshlink_api_key') || '';
 
 function showToast(msg, duration) {
   var t = document.getElementById('toast');
@@ -257,11 +258,40 @@ function showToast(msg, duration) {
   setTimeout(function(){ t.classList.remove('show'); }, duration || 3000);
 }
 
+// API Key prompt
+function ensureApiKey() {
+  if (!apiKey) {
+    apiKey = prompt('Enter API Key:');
+    if (apiKey) localStorage.setItem('meshlink_api_key', apiKey);
+  }
+  return apiKey;
+}
+
+function apiHeaders() {
+  var h = {'Content-Type': 'application/json'};
+  if (apiKey) h['X-API-Key'] = apiKey;
+  return h;
+}
+
+async function apiFetch(url, opts) {
+  ensureApiKey();
+  if (!opts) opts = {};
+  opts.headers = apiHeaders();
+  var resp = await fetch(url, opts);
+  if (resp.status === 401) {
+    localStorage.removeItem('meshlink_api_key');
+    apiKey = '';
+    showToast('Invalid API Key. Please reload and try again.', 5000);
+    throw new Error('Unauthorized');
+  }
+  return resp;
+}
+
 document.getElementById('server-url-display').textContent = location.origin;
 
 async function createPair() {
   try {
-    var resp = await fetch(API + '/api/pair/create', { method: 'POST' });
+    var resp = await apiFetch(API + '/api/pair/create', { method: 'POST' });
     var data = await resp.json();
     currentCode = data.code;
     document.getElementById('pair-code').innerHTML =
@@ -302,7 +332,7 @@ async function joinPair() {
   if (code.length !== 6) { showToast('Please enter a valid 6-digit code'); return; }
 
   try {
-    var resp = await fetch(API + '/api/pair/status?code=' + code);
+    var resp = await apiFetch(API + '/api/pair/status?code=' + code);
     if (!resp.ok) { showToast('Session not found or expired. Check the code.', 4000); return; }
     var data = await resp.json();
 
@@ -345,7 +375,7 @@ function copyCode() {
 async function pollForPeer(code) {
   var check = async function() {
     try {
-      var resp = await fetch(API + '/api/pair/status?code=' + code);
+      var resp = await apiFetch(API + '/api/pair/status?code=' + code);
       var data = await resp.json();
       var timerEl = document.getElementById('pair-timer');
 
@@ -370,7 +400,7 @@ async function pollForPeer(code) {
 
 async function refreshSessions() {
   try {
-    var resp = await fetch(API + '/api/sessions');
+    var resp = await apiFetch(API + '/api/sessions');
     var sessions = await resp.json();
     var list = document.getElementById('sessions-list');
     var empty = document.getElementById('empty-state');
