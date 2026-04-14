@@ -3,24 +3,14 @@ package api
 import (
 	"meshlink-server/internal/store"
 	"net/http"
-	"os"
-	"strings"
 )
 
-// Global API key (set from environment or flag)
-var apiKey string
-
-// SetAPIKey sets the API key for authentication
-func SetAPIKey(key string) {
-	apiKey = key
-}
-
-// corsMiddleware adds CORS headers for the web dashboard
+// corsMiddleware adds CORS headers
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -30,72 +20,33 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// apiKeyMiddleware checks for valid API key on protected routes
-func apiKeyMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// If no API key configured, allow all (development mode)
-		if apiKey == "" {
-			next(w, r)
-			return
-		}
-
-		// Check X-API-Key header
-		key := r.Header.Get("X-API-Key")
-
-		// Fallback: check Authorization: Bearer <key>
-		if key == "" {
-			auth := r.Header.Get("Authorization")
-			if strings.HasPrefix(auth, "Bearer ") {
-				key = strings.TrimPrefix(auth, "Bearer ")
-			}
-		}
-
-		// Fallback: check ?api_key= query parameter (for dashboard)
-		if key == "" {
-			key = r.URL.Query().Get("api_key")
-		}
-
-		if key != apiKey {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{
-				"error": "invalid or missing API key",
-			})
-			return
-		}
-
-		next(w, r)
-	}
-}
-
 // NewRouter creates the HTTP router with all API routes
 func NewRouter(s *store.Store) http.Handler {
 	h := NewHandlers(s)
 
-	// Load API key from environment if not already set
-	if apiKey == "" {
-		apiKey = os.Getenv("MESHLINK_API_KEY")
-	}
+	// Initialize auth
+	InitAuth()
 
 	mux := http.NewServeMux()
 
-	// Protected API routes (require API key)
-	mux.HandleFunc("/api/pair/create", apiKeyMiddleware(h.CreatePair))
-	mux.HandleFunc("/api/pair/join", apiKeyMiddleware(h.JoinPair))
-	mux.HandleFunc("/api/pair/status", apiKeyMiddleware(h.GetPairStatus))
-	mux.HandleFunc("/api/pair/update", apiKeyMiddleware(h.UpdateStatus))
-	mux.HandleFunc("/api/heartbeat", apiKeyMiddleware(h.Heartbeat))
-	mux.HandleFunc("/api/sessions", apiKeyMiddleware(h.ListSessions))
-
-	// Public routes (no API key needed)
-	mux.HandleFunc("/download/agent", ServeAgentDownload)
-	mux.HandleFunc("/", ServeDashboard)
-
-	// Health check (public)
+	// Public routes (no auth)
+	mux.HandleFunc("/api/login", HandleLogin)
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{
 			"status":  "ok",
 			"service": "meshlink-server",
 		})
 	})
+	mux.HandleFunc("/download/agent", ServeAgentDownload)
+	mux.HandleFunc("/", ServeDashboard)
+
+	// Protected routes (require JWT)
+	mux.HandleFunc("/api/pair/create", authMiddleware(h.CreatePair))
+	mux.HandleFunc("/api/pair/join", authMiddleware(h.JoinPair))
+	mux.HandleFunc("/api/pair/status", authMiddleware(h.GetPairStatus))
+	mux.HandleFunc("/api/pair/update", authMiddleware(h.UpdateStatus))
+	mux.HandleFunc("/api/heartbeat", authMiddleware(h.Heartbeat))
+	mux.HandleFunc("/api/sessions", authMiddleware(h.ListSessions))
 
 	return corsMiddleware(mux)
 }

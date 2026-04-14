@@ -245,11 +245,25 @@ const dashboardHTML = `<!DOCTYPE html>
 
 </div>
 
+<div class="hidden" id="login-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#0a0a0f;z-index:9999;display:flex;align-items:center;justify-content:center;">
+  <div style="background:#12121f;border:1px solid #1e1e35;border-radius:16px;padding:40px;width:380px;text-align:center;">
+    <div style="font-size:28px;font-weight:700;color:#00d4aa;margin-bottom:4px;">MeshLink</div>
+    <div style="color:#556;font-size:13px;margin-bottom:32px;">Direct. Private. No Third Party.</div>
+    <div id="login-error" style="color:#e04050;font-size:13px;margin-bottom:12px;display:none;"></div>
+    <input id="login-user" type="text" placeholder="Username" autocomplete="username"
+      style="width:100%;padding:12px 16px;background:#0d0d18;border:1px solid #2a2a4a;border-radius:8px;color:#fff;font-size:15px;margin-bottom:12px;outline:none;">
+    <input id="login-pass" type="password" placeholder="Password" autocomplete="current-password"
+      style="width:100%;padding:12px 16px;background:#0d0d18;border:1px solid #2a2a4a;border-radius:8px;color:#fff;font-size:15px;margin-bottom:20px;outline:none;"
+      onkeypress="if(event.key==='Enter')doLogin()">
+    <button onclick="doLogin()" class="btn btn-primary" style="width:100%;padding:14px;">Sign In</button>
+  </div>
+</div>
+
 <script>
 const API = '';
 let currentCode = '';
 let pollTimer = null;
-let apiKey = localStorage.getItem('meshlink_api_key') || '';
+let authToken = localStorage.getItem('meshlink_token') || '';
 
 function showToast(msg, duration) {
   var t = document.getElementById('toast');
@@ -258,33 +272,78 @@ function showToast(msg, duration) {
   setTimeout(function(){ t.classList.remove('show'); }, duration || 3000);
 }
 
-// API Key prompt
-function ensureApiKey() {
-  if (!apiKey) {
-    apiKey = prompt('Enter API Key:');
-    if (apiKey) localStorage.setItem('meshlink_api_key', apiKey);
+// Login
+async function doLogin() {
+  var user = document.getElementById('login-user').value.trim();
+  var pass = document.getElementById('login-pass').value;
+  var errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+
+  if (!user || !pass) { errEl.textContent = 'Enter username and password'; errEl.style.display = 'block'; return; }
+
+  try {
+    var resp = await fetch(API + '/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: user, password: pass})
+    });
+    var data = await resp.json();
+    if (resp.ok && data.token) {
+      authToken = data.token;
+      localStorage.setItem('meshlink_token', authToken);
+      document.getElementById('login-overlay').classList.add('hidden');
+      refreshSessions();
+    } else {
+      errEl.textContent = data.error || 'Login failed';
+      errEl.style.display = 'block';
+    }
+  } catch(e) {
+    errEl.textContent = 'Connection error: ' + e.message;
+    errEl.style.display = 'block';
   }
-  return apiKey;
+}
+
+function logout() {
+  authToken = '';
+  localStorage.removeItem('meshlink_token');
+  showLoginScreen();
+}
+
+function showLoginScreen() {
+  var overlay = document.getElementById('login-overlay');
+  overlay.classList.remove('hidden');
+  overlay.style.display = 'flex';
+  document.getElementById('login-user').focus();
 }
 
 function apiHeaders() {
   var h = {'Content-Type': 'application/json'};
-  if (apiKey) h['X-API-Key'] = apiKey;
+  if (authToken) h['Authorization'] = 'Bearer ' + authToken;
   return h;
 }
 
 async function apiFetch(url, opts) {
-  ensureApiKey();
+  if (!authToken) { showLoginScreen(); throw new Error('Not logged in'); }
   if (!opts) opts = {};
   opts.headers = apiHeaders();
   var resp = await fetch(url, opts);
   if (resp.status === 401) {
-    localStorage.removeItem('meshlink_api_key');
-    apiKey = '';
-    showToast('Invalid API Key. Please reload and try again.', 5000);
-    throw new Error('Unauthorized');
+    authToken = '';
+    localStorage.removeItem('meshlink_token');
+    showLoginScreen();
+    throw new Error('Session expired');
   }
   return resp;
+}
+
+// Check auth on page load
+if (authToken) {
+  // Verify token is still valid
+  fetch(API + '/api/sessions', {headers: {'Authorization': 'Bearer ' + authToken}})
+    .then(function(r){ if(r.status===401){ showLoginScreen(); } })
+    .catch(function(){ });
+} else {
+  showLoginScreen();
 }
 
 document.getElementById('server-url-display').textContent = location.origin;
