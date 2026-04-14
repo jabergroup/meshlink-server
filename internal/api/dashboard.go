@@ -153,7 +153,7 @@ const dashboardHTML = `<!DOCTYPE html>
     <div class="tagline">Direct. Private. No Third Party.</div>
   </div>
   <div class="header-actions">
-    <a href="/download/agent" class="btn-download">
+    <a href="https://github.com/jabergroup/meshlink-server/releases/latest/download/MeshLink-Setup.exe" class="btn-download">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
         <polyline points="7 10 12 15 17 10"/>
