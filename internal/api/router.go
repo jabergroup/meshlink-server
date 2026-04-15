@@ -31,7 +31,6 @@ func NewRouter(s *store.Store) http.Handler {
 
 	// Public routes (no auth)
 	mux.HandleFunc("/api/login", HandleLogin)
-	})
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{
 			"status":  "ok",
