@@ -37,6 +37,11 @@ func NewRouter(s *store.Store) http.Handler {
 			"service": "meshlink-server",
 		})
 	})
+	mux.HandleFunc("/api/auth-status", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]bool{
+			"auth_required": authUsername != "",
+		})
+	})
 	mux.HandleFunc("/download/agent", ServeAgentDownload)
 	mux.HandleFunc("/", ServeDashboard)
 

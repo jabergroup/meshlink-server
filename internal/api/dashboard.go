@@ -327,7 +327,7 @@ async function apiFetch(url, opts) {
   if (!opts) opts = {};
   opts.headers = apiHeaders();
   var resp = await fetch(url, opts);
-  if (resp.status === 401) {
+  if (resp.status === 401 && authToken !== 'none') {
     authToken = '';
     localStorage.removeItem('meshlink_token');
     showLoginScreen();
@@ -337,14 +337,25 @@ async function apiFetch(url, opts) {
 }
 
 // Check auth on page load
-if (authToken) {
-  // Verify token is still valid
-  fetch(API + '/api/sessions', {headers: {'Authorization': 'Bearer ' + authToken}})
-    .then(function(r){ if(r.status===401){ showLoginScreen(); } })
-    .catch(function(){ });
-} else {
-  showLoginScreen();
-}
+(async function checkAuth() {
+  try {
+    var r = await fetch(API + '/api/auth-status');
+    var d = await r.json();
+    if (!d.auth_required) {
+      // No auth needed - skip login
+      authToken = 'none';
+      return;
+    }
+  } catch(e) {}
+  // Auth required - check token
+  if (authToken && authToken !== 'none') {
+    fetch(API + '/api/sessions', {headers: {'Authorization': 'Bearer ' + authToken}})
+      .then(function(r){ if(r.status===401){ showLoginScreen(); } })
+      .catch(function(){ });
+  } else {
+    showLoginScreen();
+  }
+})();
 
 document.getElementById('server-url-display').textContent = location.origin;
 
