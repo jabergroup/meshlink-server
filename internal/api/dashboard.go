@@ -282,22 +282,28 @@ async function doLogin() {
   if (!user || !pass) { errEl.textContent = 'Enter username and password'; errEl.style.display = 'block'; return; }
 
   try {
+    var payload = JSON.stringify({username: user, password: pass});
+    console.log('Login attempt:', user, 'payload length:', payload.length);
     var resp = await fetch(API + '/api/login', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({username: user, password: pass})
+      body: payload
     });
+    console.log('Login response:', resp.status);
     var data = await resp.json();
+    console.log('Login data:', JSON.stringify(data));
     if (resp.ok && data.token) {
       authToken = data.token;
       localStorage.setItem('meshlink_token', authToken);
       document.getElementById('login-overlay').classList.add('hidden');
+      document.getElementById('login-overlay').style.display = 'none';
       refreshSessions();
     } else {
-      errEl.textContent = data.error || 'Login failed';
+      errEl.textContent = data.error || 'Login failed (HTTP ' + resp.status + ')';
       errEl.style.display = 'block';
     }
   } catch(e) {
+    console.error('Login error:', e);
     errEl.textContent = 'Connection error: ' + e.message;
     errEl.style.display = 'block';
   }
